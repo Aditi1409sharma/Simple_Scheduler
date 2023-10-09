@@ -67,7 +67,7 @@ void executeCommand(char *command, struct CommandHistory *history)
     }
 }
 
-void executePipeCommands(char *commands, struct CommandHistory *history)
+/*void executePipeCommands(char *commands, struct CommandHistory *history)
 {
     char **pipe_commands = NULL;
     char *token;
@@ -161,7 +161,7 @@ void executePipeCommands(char *commands, struct CommandHistory *history)
     time(&end_time);
     history->duration[command_index] = difftime(end_time, history->start_time[command_index]);
     history->count++;
-}
+}*/
 // Function to display command history
 void displayHistory(struct CommandHistory history)
 {
@@ -224,7 +224,7 @@ int main()
 	    }
 	}
         
-        else if (strchr(input, '|'))
+        /*else if (strchr(input, '|'))
         {
             executePipeCommands(input, &history);
 
@@ -237,7 +237,7 @@ int main()
             {
                 perror("History is full can't add more commands");
             }
-        }
+        }*/
         else
         {
             // Execute the command
