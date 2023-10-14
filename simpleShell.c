@@ -67,7 +67,7 @@ void executeCommand(char *command, struct CommandHistory *history)
     }
 }
 
-/*void executePipeCommands(char *commands, struct CommandHistory *history)
+void executePipeCommands(char *commands, struct CommandHistory *history)
 {
     char **pipe_commands = NULL;
     char *token;
@@ -161,7 +161,7 @@ void executeCommand(char *command, struct CommandHistory *history)
     time(&end_time);
     history->duration[command_index] = difftime(end_time, history->start_time[command_index]);
     history->count++;
-}*/
+}
 // Function to display command history
 void displayHistory(struct CommandHistory history)
 {
@@ -194,36 +194,36 @@ int main()
         {
             displayHistory(history);
         }
-        else if(strcmp(input, "exit")==0)
+        else if (strcmp(input, "exit") == 0)
         {
             displayHistory(history);
             exit(0);
         }
         else if (strncmp(input, "runscript ", 10) == 0)
-	{
-	    char scriptFileName[MAX_COMMAND_LENGTH];
-	    strcpy(scriptFileName, input + 10);
+        {
+            char scriptFileName[MAX_COMMAND_LENGTH];
+            strcpy(scriptFileName, input + 10);
 
-	    // Open the script file for reading
-	    FILE *scriptFile = fopen(scriptFileName, "r");
+            // Open the script file for reading
+            FILE *scriptFile = fopen(scriptFileName, "r");
 
-	    if (scriptFile == NULL)
-	    {
-		perror("Script file not found");
-	    }
-	    else
-	    {
-		char scriptCommand[MAX_COMMAND_LENGTH];
-		while (fgets(scriptCommand, sizeof(scriptCommand), scriptFile) != NULL)
-		{
-		    // Replace newline character with null terminator
-		    scriptCommand[strcspn(scriptCommand, "\n")] = '\0';
-		    executeCommand(scriptCommand, &history);
-		}
-		fclose(scriptFile);
-	    }
-	}
-        
+            if (scriptFile == NULL)
+            {
+                perror("Script file not found");
+            }
+            else
+            {
+                char scriptCommand[MAX_COMMAND_LENGTH];
+                while (fgets(scriptCommand, sizeof(scriptCommand), scriptFile) != NULL)
+                {
+                    // Replace newline character with null terminator
+                    scriptCommand[strcspn(scriptCommand, "\n")] = '\0';
+                    executeCommand(scriptCommand, &history);
+                }
+                fclose(scriptFile);
+            }
+        }
+
         /*else if (strchr(input, '|'))
         {
             executePipeCommands(input, &history);
