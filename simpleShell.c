@@ -72,25 +72,39 @@ void executeCommand(char *command, struct CommandHistory *history)
     else if (pid == 0)
     { // Child process
         history->pids[history->count] = pid;
-        char *args[MAX_COMMAND_LENGTH];
-        char *token;
-        int arg_count = 0;
-
-        // Tokenize the command
-        token = strtok(command, " ");
-        while (token != NULL)
+        if (strchr(command, '/'))
         {
-            args[arg_count++] = token;
-            token = strtok(NULL, " ");
+            // Execute the command using the system function
+            int system_status = system(command);
+
+            if (system_status == -1)
+            {
+                perror("Command execution failed");
+                exit(1);
+            }
         }
-        args[arg_count] = NULL;
+        else
+        {
+            char *args[MAX_COMMAND_LENGTH];
+            char *token;
+            int arg_count = 0;
 
-        // Execute the command
-        execvp(args[0], args);
+            // Tokenize the command
+            token = strtok(command, " ");
+            while (token != NULL)
+            {
+                args[arg_count++] = token;
+                token = strtok(NULL, " ");
+            }
+            args[arg_count] = NULL;
 
-        // If execvp fails, print an error message
-        perror("Command execution failed");
-        exit(1);
+            // Execute the command
+            execvp(args[0], args);
+
+            // If execvp fails, print an error message
+            perror("Command execution failed");
+            exit(1);
+        }
     }
     else
     { // Parent process
