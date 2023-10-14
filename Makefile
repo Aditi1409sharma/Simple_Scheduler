@@ -1,15 +1,18 @@
 CC = gcc
 CFLAGS = -Wall
 
-programs = ss hello
+programs = ss simpleScheduler hello
 
 all: $(programs)
 
-ss: simpleShell.c
-	$(CC) $(CFLAGS) -o $@ $<
+ss: simpleShell.c shared.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+simpleScheduler: simpleScheduler.c shared.c
+	$(CC) $(CFLAGS) -o $@ $^
 
 hello: hello.c
-	$(CC) $(CFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
 	rm -f $(programs)
