@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
     }
 
     int NCPU = atoi(argv[1]);
-    int TSLICE = atoi(argv[2);
+    int TSLICE = atoi(argv[2]);
 
     key_t key = ftok("shared_memory_key", 65);
     int shm_id = shmget(key, SHARED_MEMORY_SIZE, IPC_CREAT | 0666);
