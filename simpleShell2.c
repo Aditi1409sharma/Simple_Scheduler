@@ -76,12 +76,76 @@ void newProgramHandler(int signo)
 
 void executeCommand(char *command, struct CommandHistory *history)
 {
-    // Add code here to handle the execution of the command
+    pid_t pid;
+    int status;
+    int command_index = history->count;
+
+    time(&history->start_time[command_index]);
+
+    pid = fork();
+
+    if (pid < 0)
+    {
+        perror("Fork failed");
+        exit(1);
+    }
+    else if (pid == 0)
+    { // Child process
+        history->pids[history->count] = pid;
+        if (strchr(command, '/'))
+        {
+            // Execute the command using the system function
+            int system_status = system(command);
+
+            if (system_status == -1)
+            {
+                perror("Command execution failed");
+                exit(1);
+            }
+        }
+        else
+        {
+            char *args[MAX_COMMAND_LENGTH];
+            char *token;
+            int arg_count = 0;
+
+            // Tokenize the command
+            token = strtok(command, " ");
+            while (token != NULL)
+            {
+                args[arg_count++] = token;
+                token = strtok(NULL, " ");
+            }
+            args[arg_count] = NULL;
+
+            // Execute the command
+            execvp(args[0], args);
+
+            // If execvp fails, print an error message
+            perror("Command execution failed");
+            exit(1);
+        }
+    }
+    else
+    { // Parent process
+        waitpid(pid, &status, 0);
+        time_t end_time;
+        time(&end_time);
+        history->duration[command_index] = difftime(end_time, history->start_time[command_index]);
+    }
 }
 
 void displayHistory(struct CommandHistory history)
 {
-    // Add code to display the command history
+    printf("Command History:\n");
+    for (int i = 0; i < history.count; i++)
+    {
+        printf("%d: %s\n", i + 1, history.commands[i]);
+        printf("    PID : %d\n", history.pids[i]);
+        printf("    Priority: %d\n", history.priorities[i]);
+        printf("    Start Time : %s", ctime(&history.start_time[i]));
+        printf("    Duration : %.3lf seconds\n", history.duration[i]);
+    }
 }
 
 int main()
