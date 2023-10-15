@@ -3,7 +3,7 @@
 
 // Define a custom signal to notify child process to start execution
 #define SIG_START_EXECUTION (SIGRTMIN + 1)
-
+#define SIG_STOP_EXECUTION (SIGRTMIN + 1)
 // Data structure to represent a job or process
 struct Process
 {
