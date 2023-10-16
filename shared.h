@@ -21,6 +21,7 @@ struct ProcessQueue
     int front; // Index of the front element
     int rear;  // Index of the rear element
 };
+extern struct ProcessQueue *sharedQueue;
 
 int initSharedResources(key_t *shmkey, key_t *semkey, int *shmid, int *semid, struct ProcessQueue **processQueue);
 void cleanupSharedResources(int shmid, int semid, struct ProcessQueue *processQueue);

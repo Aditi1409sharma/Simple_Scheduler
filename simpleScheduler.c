@@ -41,77 +41,48 @@ void daemonize()
 }
 
 // Function to manage the round-robin scheduling
-void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numProcesses, int *shm_id)
+void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numProcesses, int *shm_id, struct ProcessQueue *sharedQueue)
 {
-    // Initialize the process queue with the provided processes
-    int *processQueue = (int *)malloc(numProcesses * sizeof(int));
-    for (int i = 0; i < numProcesses; i++)
-    {
-        processQueue[i] = i;
-    }
-
-    // Initialize the index to track the front of the queue
-    int front = 0;
+    int front = sharedQueue->front;
 
     while (numProcesses > 0)
     {
         int runningCount = 0;
-        // Execute processes in round-robin fashion
+
         for (int i = 0; i < NCPU; i++)
         {
-            if (processQueue[front] != -1)
+            if (!isQueueEmpty(sharedQueue))
             {
-                int processIndex = processQueue[front];
-                struct Process *currentProcess = &processes[processIndex];
+                struct Process currentProcess = dequeue(sharedQueue);
+                int processIndex = currentProcess.pid;
 
                 // Notify the child process to start execution
-                sendSignalToProcess(currentProcess->pid, SIG_START_EXECUTION);
-                printf("Scheduler: Process %d started execution.\n", currentProcess->pid);
+                sendSignalToProcess(currentProcess.pid, SIG_START_EXECUTION);
+                printf("Scheduler: Process %d started execution.\n", currentProcess.pid);
                 runningCount++;
-
-                // Remove the process from the queue
-                processQueue[front] = -1;
             }
-
-            // Move the front to the next process in the queue
-            front = (front + 1) % numProcesses;
         }
 
-        // Sleep for TSLICE seconds to simulate time quantum expiration
         sleep(TSLICE);
 
-        // Stop running processes
         for (int i = 0; i < NCPU; i++)
         {
-            int processIndex = (front - runningCount + i + numProcesses) % numProcesses;
-            if (processQueue[processIndex] != -1)
+            if (!isQueueEmpty(sharedQueue))
             {
-                struct Process *currentProcess = &processes[processQueue[processIndex]];
-                // Notify the child process to stop execution
-                sendSignalToProcess(currentProcess->pid, SIG_STOP_EXECUTION);
-                printf("Scheduler: Process %d stopped execution.\n", currentProcess->pid);
-            }
-        }
+                struct Process currentProcess = dequeue(sharedQueue);
 
-        // Rearrange the queue by adding processes back to the rear
-        for (int i = 0; i < numProcesses; i++)
-        {
-            if (processQueue[i] == -1)
-            {
-                processQueue[i] = processQueue[front];
-                processQueue[front] = -1;
-                front = (front + 1) % numProcesses;
+                // Notify the child process to stop execution
+                sendSignalToProcess(currentProcess.pid, SIG_STOP_EXECUTION);
+                printf("Scheduler: Process %d stopped execution.\n", currentProcess.pid);
             }
         }
     }
 
-    // Detach and remove the shared memory segment
     if (shmdt(processes) == -1)
     {
         perror("shmdt");
     }
 
-    // Detach and remove the shared memory id
     if (shmctl(*shm_id, IPC_RMID, NULL) == -1)
     {
         perror("shmctl");
@@ -124,7 +95,6 @@ int main(int argc, char *argv[])
 
     key_t shmkey;
     int shmid;
-    struct ProcessQueue *processQueue;
 
     if (argc != 3)
     {
@@ -144,7 +114,6 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    // Attach the shared memory segment
     struct Process *processes = (struct Process *)shmat(shm_id, NULL, 0);
 
     if (processes == (void *)-1)
@@ -157,7 +126,6 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-        // Check for new processes in shared memory
         if (processes[numProcesses].pid != -1)
         {
             numProcesses++;
@@ -168,14 +136,23 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Initialize the signal handler
     initializeSignalHandling();
 
-    // Call the scheduling function
-    scheduleProcesses(NCPU, TSLICE, processes, numProcesses, &shm_id);
+    // Access the shared queue from shared.c
+    key_t semkey;
+    int semid;
+    struct ProcessQueue *sharedQueue;
 
-    // Cleanup shared resources
-    cleanupSharedResources(shmid, 0, processQueue);
+    // Initialize shared resources and obtain the shared queue
+    if (initSharedResources(&shmkey, &semkey, &shmid, &semid, &sharedQueue) != 0)
+    {
+        exit(1);
+    }
+
+    // Call the scheduling function
+    scheduleProcesses(NCPU, TSLICE, processes, numProcesses, &shm_id, sharedQueue);
+
+    cleanupSharedResources(shmid, semid, sharedQueue);
 
     return 0;
 }

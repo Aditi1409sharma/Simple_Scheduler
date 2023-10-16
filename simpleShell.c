@@ -67,11 +67,25 @@ void startExecutionHandler(pid_t pid, int signo)
     // Add your code to start the execution of the program
 }
 
-void newProgramHandler(int signo)
+void newProgramHandler(int signo, struct ProcessQueue *processQueue)
 {
     // This signal handler will be called when a new program is ready to run
     // You can use this signal to notify simpleScheduler when a new program is submitted
-    // Add your code to handle the arrival of a new program
+
+    // Assuming you have a new program to add to the processQueue
+    struct Process newProcess;
+    // Initialize newProcess, e.g., newProcess.pid, newProcess.command
+
+    // Enqueue the new process
+    if (!isQueueFull(processQueue))
+    {
+        enqueue(processQueue, &newProcess);
+        printf("New program added to the queue. Process ID: %d\n", newProcess.pid);
+    }
+    else
+    {
+        printf("Process queue is full. Cannot add a new program.\n");
+    }
 }
 
 void executeCommand(char *command, struct CommandHistory *history)
@@ -95,6 +109,7 @@ void executeCommand(char *command, struct CommandHistory *history)
         if (strchr(command, '/'))
         {
             // Execute the command using the system function
+
             int system_status = system(command);
 
             if (system_status == -1)
@@ -162,9 +177,7 @@ int main()
     scanf("%d", &TSLICE);
 
     key_t shmkey;
-    key_t semkey;
     int shmid;
-    int semid;
     struct ProcessQueue *processQueue;
 
     shmkey = ftok("shared_memory_key", 65);
@@ -189,10 +202,16 @@ int main()
     sharedData->NCPU = NCPU;
     sharedData->TSLICE = TSLICE;
 
-    // Initialize shared resources here, similar to what you had in your original code
-    // ...
+    // Access the shared queue from shared.c
+    key_t semkey;
+    int semid;
+    struct ProcessQueue *sharedQueue;
 
-    // Store NCPU and TSLICE values in shared memory
+    // Initialize shared resources and obtain the shared queue
+    if (initSharedResources(&shmkey, &semkey, &shmid, &semid, &sharedQueue) != 0)
+    {
+        exit(1);
+    }
 
     // Initialize the signal handlers
     signal(SIG_START_EXECUTION, startExecutionHandler);
@@ -215,18 +234,22 @@ int main()
             // Extract the submitted command without "submit"
             char *command = input + 7;
 
-            // Execute the command
-            executeCommand(command, &history);
+            // Create a new process to submit the command
+            pid_t submit_pid = fork();
 
-            // Store the command in history
-            if (history.count < MAX_HISTORY_SIZE)
+            if (submit_pid == -1)
             {
-                strcpy(history.commands[history.count], command);
-                history.count++;
+                perror("Fork failed");
             }
-            else
+            else if (submit_pid == 0)
             {
-                perror("History is full, can't add more commands");
+                // Execute the command
+                executeCommand(command, &history);
+
+                // Notify the scheduler about the new program
+                kill(getppid(), SIG_NEW_PROGRAM);
+
+                exit(0);
             }
         }
         else if (strcmp(input, "history") == 0)
@@ -243,6 +266,6 @@ int main()
     // Detach and remove the shared memory segment when done
     shmdt(sharedData);
     shmctl(shmid, IPC_RMID, NULL);
-    cleanupSharedResources(shmid, semid, processQueue);
+    cleanupSharedResources(shmid, semid, sharedQueue);
     return 0;
 }

@@ -7,7 +7,7 @@
 #include "shared.h"
 
 #define SHM_SIZE 1024
-
+struct ProcessQueue *sharedQueue;
 union semun
 {
     int val;
@@ -88,6 +88,11 @@ int sendSignalToProcess(int pid, int signal)
 // Initialize signal handling for custom signals
 void initializeSignalHandling()
 {
+}
+struct ProcessQueue *createQueue(int size)
+{
+    // ... Initialize the queue ...
+    return sharedQueue;
 }
 
 void initializeQueue(struct ProcessQueue *queue)
