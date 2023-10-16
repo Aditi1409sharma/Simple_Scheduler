@@ -60,7 +60,7 @@ void timerExpired(int NCPU, int running_pids[], int signo)
     alarm(1);
 }
 
-void startExecutionHandler(int signo)
+void startExecutionHandler(pid_t pid, int signo)
 {
     // This signal handler will be called when simpleScheduler signals to start execution
     // You should start the program execution here

@@ -88,7 +88,6 @@ int sendSignalToProcess(int pid, int signal)
 // Initialize signal handling for custom signals
 void initializeSignalHandling()
 {
-    // Add your signal handling code here
 }
 
 void initializeQueue(struct ProcessQueue *queue)

@@ -126,12 +126,6 @@ int main(int argc, char *argv[])
     int shmid;
     struct ProcessQueue *processQueue;
 
-    // if (initProcessQueue(&shmkey, &shmid, &processQueue) == -1)
-    // {
-    //     fprintf(stderr, "Failed to initialize shared process queue.\n");
-    //     exit(1);
-    // }
-
     if (argc != 3)
     {
         fprintf(stderr, "Usage: %s <NCPU> <TSLICE>\n", argv[0]);
