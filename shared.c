@@ -1,59 +1,161 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
-#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
 #include "shared.h"
 
-// Define a custom signal to notify child process to start execution
-#define SIG_START_EXECUTION (SIGRTMIN + 1)
+#define SHM_SIZE 1024
 
-#ifndef SHARED_H
-#define SHARED_H
-// Data structure to represent a job or process
-struct Process
+union semun
 {
-    int pid;            // Process ID
-    char command[1024]; // Command to execute
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
 };
-#endif
+
+// Function to initialize shared memory and semaphores
+int initSharedResources(key_t *shmkey, key_t *semkey, int *shmid, int *semid, struct ProcessQueue **processQueue)
+{
+    // Create a key for the shared memory segment
+    *shmkey = ftok("shmkeyfile", 'X');
+
+    // Create a shared memory segment
+    *shmid = shmget(*shmkey, SHM_SIZE, IPC_CREAT | 0666);
+    if (*shmid == -1)
+    {
+        perror("shmget");
+        return -1;
+    }
+
+    // Attach the shared memory segment
+    *processQueue = (struct ProcessQueue *)shmat(*shmid, NULL, 0);
+    if (*processQueue == (void *)-1)
+    {
+        perror("shmat");
+        return -1;
+    }
+
+    // Create or get the semaphore set
+    *semkey = ftok("semkeyfile", 'X');
+    *semid = semget(*semkey, 1, IPC_CREAT | 0666);
+    if (*semid == -1)
+    {
+        perror("semget");
+        return -1;
+    }
+
+    // Initialize the semaphore to 1 (unlocked)
+    union semun sem_union;
+    sem_union.val = 1;
+    if (semctl(*semid, 0, SETVAL, sem_union) == -1)
+    {
+        perror("semctl");
+        return -1;
+    }
+
+    return 0; // Success
+}
+
+// Function to clean up shared resources
+void cleanupSharedResources(int shmid, int semid, struct ProcessQueue *processQueue)
+{
+    // Detach from shared memory
+    if (shmdt(processQueue) == -1)
+    {
+        perror("shmdt");
+    }
+
+    // Remove the shared memory and semaphores
+    shmctl(shmid, IPC_RMID, NULL);
+    semctl(semid, 0, IPC_RMID);
+}
+
+// ... Other functions from your original shared.c ...
+
 // Function to send a signal to a process by its PID
 int sendSignalToProcess(int pid, int signal)
 {
     if (kill(pid, signal) == -1)
     {
-        perror("Failed to send signal to the process");
+        perror("kill");
         return -1;
     }
-    return 0;
+    return 0; // Success
 }
-
-// Signal handler for custom signals
-void customSignalHandler(int signo)
-{
-    if (signo == SIG_START_EXECUTION)
-    {
-        // Handle the SIG_START_EXECUTION signal
-        // Notify the child process to start execution
-        // You can add your logic here
-    }
-}
-
-// Initialize signal handling for custom signals
 
 // Initialize signal handling for custom signals
 void initializeSignalHandling()
 {
-    struct sigaction sa;
-    sa.sa_handler = customSignalHandler;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-
-    // Install the signal handler for custom signals
-    if (sigaction(SIG_START_EXECUTION, &sa, NULL) == -1)
-    {
-        perror("Failed to install signal handler");
-        exit(EXIT_FAILURE);
-    }
+    // Add your signal handling code here
 }
 
-// Define any other shared functions or data structures here
+void initializeQueue(struct ProcessQueue *queue)
+{
+    queue->front = -1;
+    queue->rear = -1;
+}
+
+// Check if the queue is empty
+int isQueueEmpty(struct ProcessQueue *queue)
+{
+    return queue->front == -1;
+}
+
+// Check if the queue is full
+int isQueueFull(struct ProcessQueue *queue)
+{
+    return (queue->front == 0 && queue->rear == MAX_QUEUE_SIZE - 1) || (queue->rear == (queue->front - 1) % (MAX_QUEUE_SIZE - 1));
+}
+
+// Enqueue a process
+void enqueue(struct ProcessQueue *queue, struct Process *process)
+{
+    if (isQueueFull(queue))
+    {
+        printf("Queue is full. Cannot enqueue.\n");
+        return;
+    }
+
+    if (queue->front == -1)
+    {
+        // If the queue is empty, initialize front and rear
+        queue->front = queue->rear = 0;
+    }
+    else
+    {
+        // If the rear is at the end, wrap around
+        queue->rear = (queue->rear + 1) % MAX_QUEUE_SIZE;
+    }
+
+    // Enqueue the process
+    queue->processes[queue->rear] = *process;
+}
+
+// Dequeue a process
+struct Process dequeue(struct ProcessQueue *queue)
+{
+    struct Process emptyProcess;
+    emptyProcess.pid = -1;
+
+    if (isQueueEmpty(queue))
+    {
+        printf("Queue is empty. Cannot dequeue.\n");
+        return emptyProcess;
+    }
+
+    struct Process dequeuedProcess = queue->processes[queue->front];
+
+    if (queue->front == queue->rear)
+    {
+        // If there is only one element in the queue, reset the queue
+        queue->front = queue->rear = -1;
+    }
+    else
+    {
+        queue->front = (queue->front + 1) % MAX_QUEUE_SIZE;
+    }
+
+    return dequeuedProcess;
+}

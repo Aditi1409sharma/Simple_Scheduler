@@ -121,6 +121,17 @@ void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numP
 int main(int argc, char *argv[])
 {
     daemonize();
+
+    key_t shmkey;
+    int shmid;
+    struct ProcessQueue *processQueue;
+
+    // if (initProcessQueue(&shmkey, &shmid, &processQueue) == -1)
+    // {
+    //     fprintf(stderr, "Failed to initialize shared process queue.\n");
+    //     exit(1);
+    // }
+
     if (argc != 3)
     {
         fprintf(stderr, "Usage: %s <NCPU> <TSLICE>\n", argv[0]);
@@ -168,6 +179,9 @@ int main(int argc, char *argv[])
 
     // Call the scheduling function
     scheduleProcesses(NCPU, TSLICE, processes, numProcesses, &shm_id);
+
+    // Cleanup shared resources
+    cleanupSharedResources(shmid, 0, processQueue);
 
     return 0;
 }

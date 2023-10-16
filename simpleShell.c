@@ -8,11 +8,17 @@
 #include <time.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include "shared.h"
+#include "shared.h" // Include the shared header but not the shared.c file
 
 #define MAX_COMMAND_LENGTH 1024
 #define MAX_HISTORY_SIZE 100
-#define SIG_NEW_PROGRAM 10
+#define MAX_QUEUE_SIZE 100
+
+struct SharedData
+{
+    int NCPU;
+    int TSLICE;
+};
 
 // Structure to store command history
 struct CommandHistory
@@ -23,13 +29,6 @@ struct CommandHistory
     double duration[MAX_HISTORY_SIZE];
     int pids[MAX_HISTORY_SIZE];
     int priorities[MAX_HISTORY_SIZE];
-};
-
-// Structure to store shared data (NCPU and TSLICE)
-struct SharedData
-{
-    int NCPU;
-    int TSLICE;
 };
 
 struct CommandHistory history;
@@ -162,41 +161,45 @@ int main()
     printf("Enter the time quantum (TSLICE in seconds): ");
     scanf("%d", &TSLICE);
 
-    // Create a shared memory segment
-    key_t key = ftok("shared_memory_key", 1);
-    int shmid = shmget(key, sizeof(struct SharedData), 0666 | IPC_CREAT);
+    key_t shmkey;
+    key_t semkey;
+    int shmid;
+    int semid;
+    struct ProcessQueue *processQueue;
+
+    shmkey = ftok("shared_memory_key", 65);
+    shmid = shmget(shmkey, sizeof(struct SharedData), IPC_CREAT | 0666);
 
     if (shmid == -1)
     {
-        perror("shmget failed");
+        perror("shmget");
         exit(1);
     }
 
-    // Attach the shared memory segment
+    // Attach the shared data to shared memory
     struct SharedData *sharedData = (struct SharedData *)shmat(shmid, NULL, 0);
-    if (sharedData == NULL)
+
+    if (sharedData == (void *)-1)
     {
         perror("shmat failed");
         exit(1);
     }
 
-    // Store NCPU and TSLICE values in shared memory
+    // Now you can set the initial values
     sharedData->NCPU = NCPU;
     sharedData->TSLICE = TSLICE;
+
+    // Initialize shared resources here, similar to what you had in your original code
+    // ...
+
+    // Store NCPU and TSLICE values in shared memory
 
     // Initialize the signal handlers
     signal(SIG_START_EXECUTION, startExecutionHandler);
     signal(SIG_NEW_PROGRAM, newProgramHandler);
 
     // The rest of your code remains the same
-
-    if (fork() == 0)
-    {
-        // This code runs in the child process
-        execl("./simpleScheduler", "simpleScheduler", (char *)0);
-        // Handle exec failure if needed
-        exit(1);
-    }
+    // ...
 
     while (1)
     {
@@ -213,7 +216,7 @@ int main()
             char *command = input + 7;
 
             // Execute the command
-            // executeCommand(command, &history);
+            executeCommand(command, &history);
 
             // Store the command in history
             if (history.count < MAX_HISTORY_SIZE)
@@ -240,6 +243,6 @@ int main()
     // Detach and remove the shared memory segment when done
     shmdt(sharedData);
     shmctl(shmid, IPC_RMID, NULL);
-
+    cleanupSharedResources(shmid, semid, processQueue);
     return 0;
 }
