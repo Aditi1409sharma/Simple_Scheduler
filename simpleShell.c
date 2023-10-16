@@ -8,30 +8,18 @@
 #include <time.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include "shared.h" // Include the shared header but not the shared.c file
+#include "shared.h"
 
 #define MAX_COMMAND_LENGTH 1024
 #define MAX_HISTORY_SIZE 100
 #define MAX_QUEUE_SIZE 100
+struct timeval execution_start_time;
 
 struct SharedData
 {
     int NCPU;
     int TSLICE;
 };
-
-// Structure to store command history
-struct CommandHistory
-{
-    char commands[MAX_HISTORY_SIZE][MAX_COMMAND_LENGTH];
-    int count;
-    time_t start_time[MAX_HISTORY_SIZE];
-    double duration[MAX_HISTORY_SIZE];
-    int pids[MAX_HISTORY_SIZE];
-    int priorities[MAX_HISTORY_SIZE];
-};
-
-struct CommandHistory history;
 
 void stopProcess(int NCPU, int running_pids[], int signo)
 {
@@ -66,6 +54,10 @@ void executeCommand(char *command, struct CommandHistory *history)
     int status;
     int command_index = history->count;
 
+    // Calculate the start time in milliseconds
+    // struct timeval start_time;
+    gettimeofday(history->start_time, NULL);
+
     time(&history->start_time[command_index]);
 
     pid = fork();
@@ -81,6 +73,7 @@ void executeCommand(char *command, struct CommandHistory *history)
         struct Process newProcess;
         history->pids[history->count] = pid;
         strncpy(newProcess.command, command, MAX_COMMAND_LENGTH);
+        gettimeofday(&execution_start_time, NULL);
         enqueue(sharedQueue, &newProcess);
 
         if (strchr(command, '/'))
@@ -120,22 +113,35 @@ void executeCommand(char *command, struct CommandHistory *history)
     else
     { // Parent process
         waitpid(pid, &status, 0);
-        time_t end_time;
-        time(&end_time);
-        history->duration[command_index] = difftime(end_time, history->start_time[command_index]);
+
+        // Calculate the end time in milliseconds
+        // struct timeval end_time;
+        gettimeofday(history->end_time, NULL);
+
+        // Calculate the execution duration in milliseconds
+        double duration = (history->end_time->tv_sec - history->start_time->tv_sec) * 1000.0 +
+                          (history->end_time->tv_usec - history->start_time->tv_usec) / 1000.0;
+
+        history->duration[command_index] = duration;
     }
 }
 
-void displayHistory(struct CommandHistory history)
+void displayHistory(struct CommandHistory *history)
 {
     printf("Command History:\n");
-    for (int i = 0; i < history.count; i++)
+    for (int i = 0; i < history->count; i++)
     {
-        printf("%d: %s\n", i + 1, history.commands[i]);
-        printf("    PID : %d\n", history.pids[i]);
-        printf("    Priority: %d\n", history.priorities[i]);
-        printf("    Start Time : %s", ctime(&history.start_time[i]));
-        printf("    Duration : %.3lf seconds\n", history.duration[i]);
+        // Calculate the waiting time in milliseconds
+        double waitingTime = ((history->start_time[i].tv_sec - history->start_time[0].tv_sec) * 1000.0) +
+                             ((history->start_time[i].tv_usec - history->start_time[0].tv_usec) / 1000.0) +
+                             (history->duration[i]);
+
+        printf("%d: %s\n", i + 1, history->commands[i]);
+        printf("    PID : %d\n", history->pids[i]);
+        printf("    Priority: %d\n", history->priorities[i]);
+        printf("    Start Time : %s", ctime(&history->start_time[i]));
+        printf("    Execution Time: %.3lf milliseconds\n", history->duration[i]);
+        printf("    Waiting Time: %.3lf milliseconds\n", waitingTime);
     }
 }
 
@@ -151,6 +157,16 @@ int main()
     // Get the time quantum (TSLICE) from the user
     printf("Enter the time quantum (TSLICE in milliseconds): ");
     scanf("%d", &TSLICE);
+    key_t history_shmkey = ftok("history_shared_memory_key", 65);
+    int history_shmid = shmget(history_shmkey, sizeof(struct CommandHistory), 0666);
+
+    if (history_shmid == -1)
+    {
+        perror("shmget for history");
+        exit(1);
+    }
+
+    struct CommandHistory *history = (struct CommandHistory *)shmat(history_shmid, NULL, 0);
 
     key_t shmkey;
     key_t semkey;
@@ -158,7 +174,7 @@ int main()
     int semid;
     struct ProcessQueue *processQueue;
 
-    shmkey = ftok("shared_memory_key", 65);
+    shmkey = ftok("shared_memory_key", 1024);
     shmid = shmget(shmkey, sizeof(struct SharedData), IPC_CREAT | 0666);
 
     if (shmid == -1)
@@ -176,21 +192,8 @@ int main()
         exit(1);
     }
 
-    // Now you can set the initial values
     sharedData->NCPU = NCPU;
     sharedData->TSLICE = TSLICE;
-
-    // Initialize shared resources here, similar to what you had in your original code
-    // ...
-
-    // Store NCPU and TSLICE values in shared memory
-
-    // Initialize the signal handlers
-    // signal(SIG_START_EXECUTION, startExecutionHandler);
-    // signal(SIG_NEW_PROGRAM, newProgramHandler);
-
-    // The rest of your code remains the same
-    // ...
 
     while (1)
     {
@@ -210,10 +213,10 @@ int main()
             executeCommand(command, &history);
 
             // Store the command in history
-            if (history.count < MAX_HISTORY_SIZE)
+            if (history->count < MAX_HISTORY_SIZE)
             {
-                strcpy(history.commands[history.count], command);
-                history.count++;
+                strcpy(history->commands[history->count], command);
+                history->count++;
             }
             else
             {

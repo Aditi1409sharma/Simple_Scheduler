@@ -8,6 +8,7 @@
 
 #define SHM_SIZE 1024
 struct ProcessQueue *sharedQueue;
+struct CommandHistory *history;
 union semun
 {
     int val;

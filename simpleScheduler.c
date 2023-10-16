@@ -56,9 +56,17 @@ void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numP
                 struct Process currentProcess = dequeue(sharedQueue);
                 int processIndex = currentProcess.pid;
 
+                // Calculate waiting time for the process
+                time_t currentTime;
+                time(&currentTime);
+                currentProcess.waitingTime += difftime(currentTime, currentProcess.arrivalTime);
+
+                // Update the arrival time when the process leaves the queue
+                time(&currentProcess.arrivalTime);
+
                 // Notify the child process to start execution
                 sendSignalToProcess(currentProcess.pid, SIG_START_EXECUTION);
-                printf("Scheduler: Process %d started execution.\n", currentProcess.pid);
+                printf("Scheduler: Process %d started execution (Waiting Time: %.2lf seconds).\n", currentProcess.pid, currentProcess.waitingTime);
                 runningCount++;
             }
         }
@@ -71,9 +79,17 @@ void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numP
             {
                 struct Process currentProcess = dequeue(sharedQueue);
 
+                // Update the arrival time when the process leaves the queue
+                time(&currentProcess.arrivalTime);
+
+                // Calculate the execution end time and update it
+                double executionDuration = difftime(currentProcess.executionEndTime, currentProcess.arrivalTime);
+                currentProcess.waitingTime += executionDuration;
+                currentProcess.executionEndTime = 0;
+
                 // Notify the child process to stop execution
                 sendSignalToProcess(currentProcess.pid, SIG_STOP_EXECUTION);
-                printf("Scheduler: Process %d stopped execution.\n", currentProcess.pid);
+                printf("Scheduler: Process %d stopped execution (Total Waiting Time: %.2lf seconds).\n", currentProcess.pid, currentProcess.waitingTime);
             }
         }
     }
@@ -95,6 +111,17 @@ int main(int argc, char *argv[])
 
     key_t shmkey;
     int shmid;
+
+    key_t history_shmkey = ftok("history_shared_memory_key", 1024);
+    int history_shmid = shmget(history_shmkey, sizeof(struct CommandHistory), 0666);
+
+    if (history_shmid == -1)
+    {
+        perror("shmget for history");
+        exit(1);
+    }
+
+    struct CommandHistory *history = (struct CommandHistory *)shmat(history_shmid, NULL, 0);
 
     if (argc != 3)
     {
