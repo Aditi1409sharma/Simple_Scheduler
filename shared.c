@@ -6,6 +6,7 @@
 
 // Define a custom signal to notify child process to start execution
 #define SIG_START_EXECUTION (SIGRTMIN + 1)
+
 #ifndef SHARED_H
 #define SHARED_H
 // Data structure to represent a job or process

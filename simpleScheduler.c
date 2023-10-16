@@ -12,6 +12,33 @@
 
 // The size of the shared memory segment
 #define SHARED_MEMORY_SIZE 1024
+void daemonize()
+{
+    pid_t pid, sid;
+    pid = fork();
+    if (pid < 0)
+    {
+        exit(1); // Fork error
+    }
+    if (pid > 0)
+    {
+        exit(0); // Parent process exits
+    }
+    umask(0);       // Change file mode mask
+    sid = setsid(); // Create a new session
+    if (sid < 0)
+    {
+        exit(1); // SID creation error
+    }
+    // Change the working directory to a safe location
+    if ((chdir("/")) < 0)
+    {
+        exit(1);
+    }
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+}
 
 // Function to manage the round-robin scheduling
 void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numProcesses, int *shm_id)
@@ -93,6 +120,7 @@ void scheduleProcesses(int NCPU, int TSLICE, struct Process *processes, int numP
 
 int main(int argc, char *argv[])
 {
+    daemonize();
     if (argc != 3)
     {
         fprintf(stderr, "Usage: %s <NCPU> <TSLICE>\n", argv[0]);

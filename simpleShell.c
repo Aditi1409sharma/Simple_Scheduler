@@ -4,10 +4,15 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include <time.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include "shared.h"
 
 #define MAX_COMMAND_LENGTH 1024
 #define MAX_HISTORY_SIZE 100
+#define SIG_NEW_PROGRAM 10
 
 // Structure to store command history
 struct CommandHistory
@@ -20,13 +25,16 @@ struct CommandHistory
     int priorities[MAX_HISTORY_SIZE];
 };
 
-// Global variables for process management
-struct CommandHistory history;
-int NCPU = 1; // Number of available CPUs
-int current_priority = 1;
-pid_t running_pids[4]; // Stores the PIDs of currently running processes
+// Structure to store shared data (NCPU and TSLICE)
+struct SharedData
+{
+    int NCPU;
+    int TSLICE;
+};
 
-void stopProcess(int signo)
+struct CommandHistory history;
+
+void stopProcess(int NCPU, int running_pids[], int signo)
 {
     // Stop the currently running process
     for (int i = 0; i < NCPU; i++)
@@ -38,7 +46,7 @@ void stopProcess(int signo)
     }
 }
 
-void timerExpired(int signo)
+void timerExpired(int NCPU, int running_pids[], int signo)
 {
     // Implement what happens when a timer expires
     // Resume the stopped processes
@@ -53,7 +61,20 @@ void timerExpired(int signo)
     alarm(1);
 }
 
-// Function to execute a command
+void startExecutionHandler(int signo)
+{
+    // This signal handler will be called when simpleScheduler signals to start execution
+    // You should start the program execution here
+    // Add your code to start the execution of the program
+}
+
+void newProgramHandler(int signo)
+{
+    // This signal handler will be called when a new program is ready to run
+    // You can use this signal to notify simpleScheduler when a new program is submitted
+    // Add your code to handle the arrival of a new program
+}
+
 void executeCommand(char *command, struct CommandHistory *history)
 {
     pid_t pid;
@@ -115,7 +136,6 @@ void executeCommand(char *command, struct CommandHistory *history)
     }
 }
 
-// Function to display command history
 void displayHistory(struct CommandHistory history)
 {
     printf("Command History:\n");
@@ -131,20 +151,82 @@ void displayHistory(struct CommandHistory history)
 
 int main()
 {
-    char input[MAX_COMMAND_LENGTH];
-    struct CommandHistory history;
-    history.count = 0;
+    int NCPU;
+    int TSLICE;
+
+    // Get the number of CPUs (NCPU) from the user
+    printf("Enter the number of CPUs (NCPU): ");
+    scanf("%d", &NCPU);
+
+    // Get the time quantum (TSLICE) from the user
+    printf("Enter the time quantum (TSLICE in seconds): ");
+    scanf("%d", &TSLICE);
+
+    // Create a shared memory segment
+    key_t key = ftok("shared_memory_key", 1);
+    int shmid = shmget(key, sizeof(struct SharedData), 0666 | IPC_CREAT);
+
+    if (shmid == -1)
+    {
+        perror("shmget failed");
+        exit(1);
+    }
+
+    // Attach the shared memory segment
+    struct SharedData *sharedData = (struct SharedData *)shmat(shmid, NULL, 0);
+    if (sharedData == NULL)
+    {
+        perror("shmat failed");
+        exit(1);
+    }
+
+    // Store NCPU and TSLICE values in shared memory
+    sharedData->NCPU = NCPU;
+    sharedData->TSLICE = TSLICE;
+
+    // Initialize the signal handlers
+    signal(SIG_START_EXECUTION, startExecutionHandler);
+    signal(SIG_NEW_PROGRAM, newProgramHandler);
+
+    // The rest of your code remains the same
+
+    if (fork() == 0)
+    {
+        // This code runs in the child process
+        execl("./simpleScheduler", "simpleScheduler", (char *)0);
+        // Handle exec failure if needed
+        exit(1);
+    }
 
     while (1)
     {
         printf("SimpleShell> ");
+        char input[MAX_COMMAND_LENGTH];
         fgets(input, sizeof(input), stdin);
 
         // Remove newline character from the input
         input[strcspn(input, "\n")] = '\0';
 
-        // Check for history command
-        if (strcmp(input, "history") == 0)
+        if (strncmp(input, "submit ", 7) == 0)
+        {
+            // Extract the submitted command without "submit"
+            char *command = input + 7;
+
+            // Execute the command
+            // executeCommand(command, &history);
+
+            // Store the command in history
+            if (history.count < MAX_HISTORY_SIZE)
+            {
+                strcpy(history.commands[history.count], command);
+                history.count++;
+            }
+            else
+            {
+                perror("History is full, can't add more commands");
+            }
+        }
+        else if (strcmp(input, "history") == 0)
         {
             displayHistory(history);
         }
@@ -153,48 +235,11 @@ int main()
             displayHistory(history);
             exit(0);
         }
-        else if (strncmp(input, "runscript ", 10) == 0)
-        {
-            char scriptFileName[MAX_COMMAND_LENGTH];
-            strcpy(scriptFileName, input + 10);
-
-            // Open the script file for reading
-            FILE *scriptFile = fopen(scriptFileName, "r");
-
-            if (scriptFile == NULL)
-            {
-                perror("Script file not found");
-            }
-            else
-            {
-                char scriptCommand[MAX_COMMAND_LENGTH];
-                while (fgets(scriptCommand, sizeof(scriptCommand), scriptFile) != NULL)
-                {
-                    // Replace newline character with null terminator
-                    scriptCommand[strcspn(scriptCommand, "\n")] = '\0';
-                    executeCommand(scriptCommand, &history);
-                }
-                fclose(scriptFile);
-            }
-        }
-
-        else
-        {
-            // Execute the command
-            executeCommand(input, &history);
-
-            // Store the command in history
-            if (history.count < MAX_HISTORY_SIZE)
-            {
-                strcpy(history.commands[history.count], input);
-                history.count++;
-            }
-            else
-            {
-                perror("History is full can't add more commands");
-            }
-        }
     }
+
+    // Detach and remove the shared memory segment when done
+    shmdt(sharedData);
+    shmctl(shmid, IPC_RMID, NULL);
 
     return 0;
 }
