@@ -60,20 +60,6 @@ void timerExpired(int NCPU, int running_pids[], int signo)
     alarm(1);
 }
 
-void startExecutionHandler(pid_t pid, int signo)
-{
-    // This signal handler will be called when simpleScheduler signals to start execution
-    // You should start the program execution here
-    // Add your code to start the execution of the program
-}
-
-void newProgramHandler(int signo)
-{
-    // This signal handler will be called when a new program is ready to run
-    // You can use this signal to notify simpleScheduler when a new program is submitted
-    // Add your code to handle the arrival of a new program
-}
-
 void executeCommand(char *command, struct CommandHistory *history)
 {
     pid_t pid;
@@ -95,7 +81,8 @@ void executeCommand(char *command, struct CommandHistory *history)
         struct Process newProcess;
         history->pids[history->count] = pid;
         strncpy(newProcess.command, command, MAX_COMMAND_LENGTH);
-        enqueue(ProcessQueue, &newProcess);    
+        enqueue(sharedQueue, &newProcess);
+
         if (strchr(command, '/'))
         {
             // Execute the command using the system function
@@ -162,7 +149,7 @@ int main()
     scanf("%d", &NCPU);
 
     // Get the time quantum (TSLICE) from the user
-    printf("Enter the time quantum (TSLICE in seconds): ");
+    printf("Enter the time quantum (TSLICE in milliseconds): ");
     scanf("%d", &TSLICE);
 
     key_t shmkey;
@@ -199,8 +186,8 @@ int main()
     // Store NCPU and TSLICE values in shared memory
 
     // Initialize the signal handlers
-    signal(SIG_START_EXECUTION, startExecutionHandler);
-    signal(SIG_NEW_PROGRAM, newProgramHandler);
+    // signal(SIG_START_EXECUTION, startExecutionHandler);
+    // signal(SIG_NEW_PROGRAM, newProgramHandler);
 
     // The rest of your code remains the same
     // ...

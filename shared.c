@@ -101,6 +101,22 @@ void initializeQueue(struct ProcessQueue *queue)
     queue->rear = -1;
 }
 
+int isQueueReady(struct ProcessQueue *queue, int NCPU)
+{
+    // Calculate the number of processes in the queue
+    int numProcesses = (queue->rear - queue->front + MAX_QUEUE_SIZE) % MAX_QUEUE_SIZE + 1;
+
+    // Check if the number of processes is equal to or greater than NCPU
+    if (numProcesses >= NCPU)
+    {
+        return 1; // Ready for execution
+    }
+    else
+    {
+        return 0; // Not ready for execution
+    }
+}
+
 // Check if the queue is empty
 int isQueueEmpty(struct ProcessQueue *queue)
 {
